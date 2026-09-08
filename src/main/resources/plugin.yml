@@ -1,0 +1,13 @@
+name: TridentWaterPlugin
+version: 1.0.0
+main: com.example.tridentwater.TridentWaterPlugin
+api-version: '1.21'
+author: Rajat
+description: Custom Riptide water plugin with permanent 3x3 trail and temporary launchpad.
+commands:
+  zo:
+    description: Toggle permanent 3x3 water trail during Riptide flight
+    usage: /zo <on|off>
+  tridentlaunchpad:
+    description: Toggle temporary launchpad water on crouch + Riptide 3
+    usage: /tridentlaunchpad <on|off>
