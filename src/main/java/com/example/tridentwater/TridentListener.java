@@ -16,9 +16,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,9 +35,9 @@ public class TridentListener implements Listener {
         if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
                 ItemStack item = player.getInventory().getItemInMainHand();
-                if (item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
-                    // Exact player feet coords - replaces ANY block & restores back (Physics OFF)
-                    createTemporaryWaterGrid(player.getLocation(), 1, 60L);
+                if (item != null && item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
+                    // 1x1 Launchpad water at exact player feet location
+                    create1x1Launchpad(player.getLocation(), 60L);
                 }
             }
         }
@@ -52,7 +50,17 @@ public class TridentListener implements Listener {
         if (!plugin.isZoEnabled(player.getUniqueId())) return;
 
         boolean isInfinite = plugin.isZoInfinite(player.getUniqueId());
-        Vector flyVector = player.getLocation().getDirection().normalize().multiply(1.4);
+        String customDir = plugin.getZoDirection(player.getUniqueId());
+
+        Vector flyVector;
+        if (customDir != null) {
+            flyVector = getDirectionVector(customDir);
+        } else {
+            flyVector = player.getLocation().getDirection().normalize().multiply(1.4);
+        }
+
+        // Disable gravity during ZO flight to stop falling
+        player.setGravity(false);
 
         new BukkitRunnable() {
             int ticks = 0;
@@ -62,21 +70,20 @@ public class TridentListener implements Listener {
             @Override
             public void run() {
                 if (!player.isOnline() || player.isDead()) {
-                    grantFallProtection(player.getUniqueId());
+                    stopFlight(player);
                     this.cancel();
                     return;
                 }
 
-                // Prevent gravity fall during active flight
                 player.setFallDistance(0.0f);
 
                 if (isInfinite) {
                     float currentYaw = player.getLocation().getYaw();
                     float currentPitch = player.getLocation().getPitch();
 
-                    // Cancel infinite flight on sharp turns (>30 deg)
-                    if (Math.abs(currentYaw - lastYaw) > 30.0f || Math.abs(currentPitch - lastPitch) > 30.0f) {
-                        grantFallProtection(player.getUniqueId());
+                    // Cancel infinite flight on sharp camera turn (> 25 degrees)
+                    if (Math.abs(currentYaw - lastYaw) > 25.0f || Math.abs(currentPitch - lastPitch) > 25.0f) {
+                        stopFlight(player);
                         this.cancel();
                         return;
                     }
@@ -85,21 +92,40 @@ public class TridentListener implements Listener {
                     lastPitch = currentPitch;
 
                     player.setVelocity(flyVector);
-                    // Place water envelope around player and ahead of motion
                     create3DWaterGrid(player.getLocation(), 2);
-                    create3DWaterGrid(player.getLocation().add(flyVector), 2);
+                    create3DWaterGrid(player.getLocation().clone().add(flyVector), 2);
                 } else {
-                    if (ticks > 30) {
-                        grantFallProtection(player.getUniqueId());
+                    if (ticks > 35) {
+                        stopFlight(player);
                         this.cancel();
                         return;
                     }
+                    player.setVelocity(flyVector);
                     create3DWaterGrid(player.getLocation(), 2);
-                    create3DWaterGrid(player.getLocation().add(flyVector), 2);
+                    create3DWaterGrid(player.getLocation().clone().add(flyVector), 2);
                     ticks += 2;
                 }
             }
         }.runTaskTimer(plugin, 0L, 1L);
+    }
+
+    private Vector getDirectionVector(String dir) {
+        return switch (dir.toLowerCase()) {
+            case "+x" -> new Vector(1.4, 0, 0);
+            case "-x" -> new Vector(-1.4, 0, 0);
+            case "+z" -> new Vector(0, 0, 1.4);
+            case "-z" -> new Vector(0, 0, -1.4);
+            case "+y" -> new Vector(0, 1.4, 0);
+            case "-y" -> new Vector(0, -1.4, 0);
+            default -> new Vector(1.4, 0, 0);
+        };
+    }
+
+    private void stopFlight(Player player) {
+        if (player != null && player.isOnline()) {
+            player.setGravity(true);
+            grantFallProtection(player.getUniqueId());
+        }
     }
 
     @EventHandler
@@ -121,39 +147,25 @@ public class TridentListener implements Listener {
             public void run() {
                 fallProtectedPlayers.remove(uuid);
             }
-        }.runTaskLater(plugin, 100L); // Protection active for 5 seconds after flight stops
+        }.runTaskLater(plugin, 100L);
     }
 
-    // Launchpad Water: No Physics, Replaces ANY Block at exact coords and Restores it Back
-    private void createTemporaryWaterGrid(Location centerLoc, int radius, long restoreDelayTicks) {
-        Map<Block, BlockData> originalBlocks = new HashMap<>();
+    // 1x1 Feet Launchpad Fix with reliable Block Restoration
+    private void create1x1Launchpad(Location centerLoc, long restoreDelayTicks) {
+        Block block = centerLoc.getBlock();
+        BlockData originalData = block.getBlockData().clone();
 
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                Block block = centerLoc.clone().add(x, 0, z).getBlock();
-                if (!originalBlocks.containsKey(block)) {
-                    originalBlocks.put(block, block.getBlockData().clone());
-                }
-                // Set water with NO physics update (applyPhysics = false)
-                block.setType(Material.WATER, false);
+        block.setType(Material.WATER, false);
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                // Force physics update on restore to cleanly clear water graphics
+                block.setBlockData(originalData, true);
             }
-        }
-
-        if (!originalBlocks.isEmpty()) {
-            new BukkitRunnable() {
-                @Override
-                public void run() {
-                    for (Map.Entry<Block, BlockData> entry : originalBlocks.entrySet()) {
-                        Block b = entry.getKey();
-                        // Restore exact original block state back without physics update
-                        b.setBlockData(entry.getValue(), false);
-                    }
-                }
-            }.runTaskLater(plugin, restoreDelayTicks);
-        }
+        }.runTaskLater(plugin, restoreDelayTicks);
     }
 
-    // ZO Flight 3D Water Envelope
     private void create3DWaterGrid(Location centerLoc, int radius) {
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
