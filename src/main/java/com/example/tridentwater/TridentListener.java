@@ -13,6 +13,8 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerRiptideEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
 
@@ -36,7 +38,6 @@ public class TridentListener implements Listener {
             if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
                 ItemStack item = player.getInventory().getItemInMainHand();
                 if (item != null && item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
-                    // 1x1 Launchpad water at exact player feet location
                     create1x1Launchpad(player.getLocation(), 60L);
                 }
             }
@@ -57,9 +58,12 @@ public class TridentListener implements Listener {
             flyVector = getDirectionVector(customDir);
         } else {
             flyVector = player.getLocation().getDirection().normalize().multiply(1.4);
+            // Maintain horizontal Y altitude to prevent sinking in water blocks
+            if (Math.abs(flyVector.getY()) < 0.15) {
+                flyVector.setY(0.05);
+            }
         }
 
-        // Disable gravity during ZO flight to stop falling
         player.setGravity(false);
 
         new BukkitRunnable() {
@@ -81,7 +85,6 @@ public class TridentListener implements Listener {
                     float currentYaw = player.getLocation().getYaw();
                     float currentPitch = player.getLocation().getPitch();
 
-                    // Cancel infinite flight on sharp camera turn (> 25 degrees)
                     if (Math.abs(currentYaw - lastYaw) > 25.0f || Math.abs(currentPitch - lastPitch) > 25.0f) {
                         stopFlight(player);
                         this.cancel();
@@ -111,19 +114,21 @@ public class TridentListener implements Listener {
 
     private Vector getDirectionVector(String dir) {
         return switch (dir.toLowerCase()) {
-            case "+x" -> new Vector(1.4, 0, 0);
-            case "-x" -> new Vector(-1.4, 0, 0);
-            case "+z" -> new Vector(0, 0, 1.4);
-            case "-z" -> new Vector(0, 0, -1.4);
+            case "+x" -> new Vector(1.4, 0.05, 0);
+            case "-x" -> new Vector(-1.4, 0.05, 0);
+            case "+z" -> new Vector(0, 0.05, 1.4);
+            case "-z" -> new Vector(0, 0.05, -1.4);
             case "+y" -> new Vector(0, 1.4, 0);
             case "-y" -> new Vector(0, -1.4, 0);
-            default -> new Vector(1.4, 0, 0);
+            default -> new Vector(1.4, 0.05, 0);
         };
     }
 
     private void stopFlight(Player player) {
         if (player != null && player.isOnline()) {
             player.setGravity(true);
+            // Apply Slow Falling effect on flight termination for smooth glide landing
+            player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, 100, 0, false, false));
             grantFallProtection(player.getUniqueId());
         }
     }
@@ -150,7 +155,6 @@ public class TridentListener implements Listener {
         }.runTaskLater(plugin, 100L);
     }
 
-    // 1x1 Feet Launchpad Fix with reliable Block Restoration
     private void create1x1Launchpad(Location centerLoc, long restoreDelayTicks) {
         Block block = centerLoc.getBlock();
         BlockData originalData = block.getBlockData().clone();
@@ -160,7 +164,6 @@ public class TridentListener implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
-                // Force physics update on restore to cleanly clear water graphics
                 block.setBlockData(originalData, true);
             }
         }.runTaskLater(plugin, restoreDelayTicks);
