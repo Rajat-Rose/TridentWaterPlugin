@@ -26,7 +26,6 @@ public class TridentListener implements Listener {
         this.plugin = plugin;
     }
 
-    // Direct land right-click launchpad trigger
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
@@ -47,12 +46,12 @@ public class TridentListener implements Listener {
         if (!plugin.isZoEnabled(player.getUniqueId())) return;
 
         boolean isInfinite = plugin.isZoInfinite(player.getUniqueId());
-        Vector flyVector = player.getLocation().getDirection().normalize().multiply(1.35);
-        float startYaw = player.getLocation().getYaw();
-        float startPitch = player.getLocation().getPitch();
+        Vector flyVector = player.getLocation().getDirection().normalize().multiply(1.5);
 
         new BukkitRunnable() {
             int ticks = 0;
+            float lastYaw = player.getLocation().getYaw();
+            float lastPitch = player.getLocation().getPitch();
 
             @Override
             public void run() {
@@ -62,15 +61,19 @@ public class TridentListener implements Listener {
                 }
 
                 if (isInfinite) {
-                    // Check if player changed head direction
                     float currentYaw = player.getLocation().getYaw();
                     float currentPitch = player.getLocation().getPitch();
 
-                    if (Math.abs(currentYaw - startYaw) > 12.0f || Math.abs(currentPitch - startPitch) > 12.0f) {
+                    // Detect deliberate sharp turn (> 30 deg in a single tick)
+                    if (Math.abs(currentYaw - lastYaw) > 30.0f || Math.abs(currentPitch - lastPitch) > 30.0f) {
                         this.cancel();
                         return;
                     }
 
+                    lastYaw = currentYaw;
+                    lastPitch = currentPitch;
+
+                    // Continuous smooth push & seamless 3D water trail
                     player.setVelocity(flyVector);
                     create3DWaterGrid(player.getLocation(), 1);
                 } else {
@@ -85,7 +88,6 @@ public class TridentListener implements Listener {
         }.runTaskTimer(plugin, 0L, 1L);
     }
 
-    // Temporary Water Launchpad
     private void createTemporaryWaterGrid(Location centerLoc, int radius, long restoreDelayTicks) {
         Map<Block, BlockData> originalBlocks = new HashMap<>();
 
@@ -114,7 +116,6 @@ public class TridentListener implements Listener {
         }
     }
 
-    // 3D Water Grid prevents falling during horizontal X/Z Riptide flight
     private void create3DWaterGrid(Location centerLoc, int radius) {
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
