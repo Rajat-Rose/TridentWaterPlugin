@@ -7,7 +7,6 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class ZoCommand implements CommandExecutor, TabCompleter {
@@ -21,26 +20,33 @@ public class ZoCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "This command can only be used by players.");
+            sender.sendMessage(ChatColor.RED + "Only players can execute this command.");
             return true;
         }
 
-        // Show red error if only /zo on or /zo off is used
         if (args.length == 1 && (args[0].equalsIgnoreCase("on") || args[0].equalsIgnoreCase("off"))) {
             player.sendMessage(ChatColor.RED + "Command not set");
             return true;
         }
 
         if (args.length >= 2 && args[1].equalsIgnoreCase("super")) {
-            boolean isInfinite = args.length >= 3 && args[2].equalsIgnoreCase("infinite");
-
             if (args[0].equalsIgnoreCase("on")) {
+                boolean isInfinite = args.length >= 3 && args[2].equalsIgnoreCase("infinite");
+                String dir = (args.length >= 4) ? args[3] : null;
+
+                if (dir != null && !isValidDir(dir)) {
+                    player.sendMessage(ChatColor.RED + "Invalid direction! Use: +x, -x, +z, -z, +y, -y");
+                    return true;
+                }
+
                 plugin.setZoEnabled(player.getUniqueId(), true);
                 plugin.setZoInfinite(player.getUniqueId(), isInfinite);
-                player.sendMessage(ChatColor.GREEN + "ZO Super " + (isInfinite ? "Infinite " : "") + "ENABLED!");
+                plugin.setZoDirection(player.getUniqueId(), dir);
+
+                String msg = ChatColor.GREEN + "ZO Super " + (isInfinite ? "Infinite " : "") + (dir != null ? "[" + dir.toUpperCase() + "] " : "") + "ENABLED!";
+                player.sendMessage(msg);
             } else if (args[0].equalsIgnoreCase("off")) {
                 plugin.setZoEnabled(player.getUniqueId(), false);
-                plugin.setZoInfinite(player.getUniqueId(), false);
                 player.sendMessage(ChatColor.RED + "ZO Super DISABLED!");
             } else {
                 player.sendMessage(ChatColor.RED + "Command not set");
@@ -52,6 +58,12 @@ public class ZoCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
+    private boolean isValidDir(String dir) {
+        return dir.equalsIgnoreCase("+x") || dir.equalsIgnoreCase("-x") ||
+               dir.equalsIgnoreCase("+z") || dir.equalsIgnoreCase("-z") ||
+               dir.equalsIgnoreCase("+y") || dir.equalsIgnoreCase("-y");
+    }
+
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
@@ -60,6 +72,8 @@ public class ZoCommand implements CommandExecutor, TabCompleter {
             return List.of("super");
         } else if (args.length == 3) {
             return List.of("infinite");
+        } else if (args.length == 4 && args[2].equalsIgnoreCase("infinite")) {
+            return List.of("+x", "-x", "+z", "-z", "+y", "-y");
         }
         return List.of();
     }
