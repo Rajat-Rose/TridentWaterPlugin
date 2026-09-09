@@ -25,31 +25,41 @@ public class ZoCommand implements CommandExecutor, TabCompleter {
             return true;
         }
 
-        if (args.length != 1) {
-            player.sendMessage(ChatColor.YELLOW + "Usage: /zo <on|off>");
+        // Show red error if only /zo on or /zo off is used
+        if (args.length == 1 && (args[0].equalsIgnoreCase("on") || args[0].equalsIgnoreCase("off"))) {
+            player.sendMessage(ChatColor.RED + "Command not set");
             return true;
         }
 
-        if (args[0].equalsIgnoreCase("on")) {
-            plugin.setZoEnabled(player.getUniqueId(), true);
-            player.sendMessage(ChatColor.GREEN + "Permanent 3x3 Water Trail ENABLED!");
-        } else if (args[0].equalsIgnoreCase("off")) {
-            plugin.setZoEnabled(player.getUniqueId(), false);
-            player.sendMessage(ChatColor.RED + "Permanent 3x3 Water Trail DISABLED!");
-        } else {
-            player.sendMessage(ChatColor.YELLOW + "Usage: /zo <on|off>");
+        if (args.length >= 2 && args[1].equalsIgnoreCase("super")) {
+            boolean isInfinite = args.length >= 3 && args[2].equalsIgnoreCase("infinite");
+
+            if (args[0].equalsIgnoreCase("on")) {
+                plugin.setZoEnabled(player.getUniqueId(), true);
+                plugin.setZoInfinite(player.getUniqueId(), isInfinite);
+                player.sendMessage(ChatColor.GREEN + "ZO Super " + (isInfinite ? "Infinite " : "") + "ENABLED!");
+            } else if (args[0].equalsIgnoreCase("off")) {
+                plugin.setZoEnabled(player.getUniqueId(), false);
+                plugin.setZoInfinite(player.getUniqueId(), false);
+                player.sendMessage(ChatColor.RED + "ZO Super DISABLED!");
+            } else {
+                player.sendMessage(ChatColor.RED + "Command not set");
+            }
+            return true;
         }
 
+        player.sendMessage(ChatColor.RED + "Command not set");
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            List<String> options = new ArrayList<>();
-            if ("on".startsWith(args[0].toLowerCase())) options.add("on");
-            if ("off".startsWith(args[0].toLowerCase())) options.add("off");
-            return options;
+            return List.of("on", "off");
+        } else if (args.length == 2) {
+            return List.of("super");
+        } else if (args.length == 3) {
+            return List.of("infinite");
         }
         return List.of();
     }
