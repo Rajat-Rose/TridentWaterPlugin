@@ -38,7 +38,7 @@ public class TridentListener implements Listener {
             if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
                 ItemStack item = player.getInventory().getItemInMainHand();
                 if (item != null && item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
-                    create1x1Launchpad(player.getLocation(), 60L);
+                    create1x1Launchpad(player.getLocation(), 40L); // Clears water after 2 seconds
                 }
             }
         }
@@ -58,7 +58,6 @@ public class TridentListener implements Listener {
             flyVector = getDirectionVector(customDir);
         } else {
             flyVector = player.getLocation().getDirection().normalize().multiply(1.4);
-            // Maintain horizontal Y altitude to prevent sinking in water blocks
             if (Math.abs(flyVector.getY()) < 0.15) {
                 flyVector.setY(0.05);
             }
@@ -117,7 +116,7 @@ public class TridentListener implements Listener {
             case "+x" -> new Vector(1.4, 0.05, 0);
             case "-x" -> new Vector(-1.4, 0.05, 0);
             case "+z" -> new Vector(0, 0.05, 1.4);
-            case "-z" -> new Vector(0, 0.05, -1.4);
+            case "-z" -> new Vector(0, -0.05, -1.4);
             case "+y" -> new Vector(0, 1.4, 0);
             case "-y" -> new Vector(0, -1.4, 0);
             default -> new Vector(1.4, 0.05, 0);
@@ -127,7 +126,6 @@ public class TridentListener implements Listener {
     private void stopFlight(Player player) {
         if (player != null && player.isOnline()) {
             player.setGravity(true);
-            // Apply Slow Falling effect on flight termination for smooth glide landing
             player.addPotionEffect(new PotionEffect(PotionEffectType.SLOW_FALLING, 100, 0, false, false));
             grantFallProtection(player.getUniqueId());
         }
@@ -155,8 +153,10 @@ public class TridentListener implements Listener {
         }.runTaskLater(plugin, 100L);
     }
 
+    // Guaranteed Launchpad Water Removal & Block Restoration
     private void create1x1Launchpad(Location centerLoc, long restoreDelayTicks) {
         Block block = centerLoc.getBlock();
+        Material originalMaterial = block.getType();
         BlockData originalData = block.getBlockData().clone();
 
         block.setType(Material.WATER, false);
@@ -164,7 +164,13 @@ public class TridentListener implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
-                block.setBlockData(originalData, true);
+                if (originalMaterial == Material.AIR || originalMaterial == Material.CAVE_AIR || originalMaterial == Material.VOID_AIR) {
+                    block.setType(Material.AIR, true);
+                } else {
+                    block.setBlockData(originalData, true);
+                }
+                // Force state update to clear phantom water graphics
+                block.getState().update(true, true);
             }
         }.runTaskLater(plugin, restoreDelayTicks);
     }
