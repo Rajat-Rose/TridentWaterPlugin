@@ -9,6 +9,7 @@ import java.util.UUID;
 public class TridentWaterPlugin extends JavaPlugin {
 
     private final Set<UUID> zoEnabled = new HashSet<>();
+    private final Set<UUID> zoInfinite = new HashSet<>();
     private final Set<UUID> launchpadEnabled = new HashSet<>();
 
     @Override
@@ -27,22 +28,25 @@ public class TridentWaterPlugin extends JavaPlugin {
 
         getServer().getPluginManager().registerEvents(new TridentListener(this), this);
 
-        getLogger().info("TridentWaterPlugin successfully enabled!");
+        getLogger().info("TridentWaterPlugin enabled successfully!");
     }
 
-    public boolean isZoEnabled(UUID uuid) {
-        return zoEnabled.contains(uuid);
-    }
-
+    public boolean isZoEnabled(UUID uuid) { return zoEnabled.contains(uuid); }
     public void setZoEnabled(UUID uuid, boolean enable) {
         if (enable) zoEnabled.add(uuid);
-        else zoEnabled.remove(uuid);
+        else {
+            zoEnabled.remove(uuid);
+            zoInfinite.remove(uuid);
+        }
     }
 
-    public boolean isLaunchpadEnabled(UUID uuid) {
-        return launchpadEnabled.contains(uuid);
+    public boolean isZoInfinite(UUID uuid) { return zoInfinite.contains(uuid); }
+    public void setZoInfinite(UUID uuid, boolean enable) {
+        if (enable) zoInfinite.add(uuid);
+        else zoInfinite.remove(uuid);
     }
 
+    public boolean isLaunchpadEnabled(UUID uuid) { return launchpadEnabled.contains(uuid); }
     public void setLaunchpadEnabled(UUID uuid, boolean enable) {
         if (enable) launchpadEnabled.add(uuid);
         else launchpadEnabled.remove(uuid);
