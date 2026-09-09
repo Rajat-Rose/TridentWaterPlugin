@@ -6,12 +6,14 @@ import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.Pose;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerRiptideEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.util.Vector;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,40 +26,66 @@ public class TridentListener implements Listener {
         this.plugin = plugin;
     }
 
+    // Direct land right-click launchpad trigger
+    @EventHandler
+    public void onInteract(PlayerInteractEvent event) {
+        Player player = event.getPlayer();
+        if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
+            if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
+                ItemStack item = player.getInventory().getItemInMainHand();
+                if (item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
+                    createTemporaryWaterGrid(player.getLocation(), 1, 60L);
+                }
+            }
+        }
+    }
+
     @EventHandler
     public void onRiptide(PlayerRiptideEvent event) {
         Player player = event.getPlayer();
-        ItemStack item = event.getItem();
 
-        int riptideLevel = item.getEnchantmentLevel(Enchantment.RIPTIDE);
-        boolean isCrouching = player.isSneaking() || player.getPose() == Pose.SNEAKING;
+        if (!plugin.isZoEnabled(player.getUniqueId())) return;
 
-        // 1. Temporary Launchpad Water (Triggers if /tridentlaunchpad is ON + Crouch/Sneak + Riptide 3)
-        if (plugin.isLaunchpadEnabled(player.getUniqueId()) && isCrouching && riptideLevel >= 3) {
-            createTemporaryWaterGrid(player.getLocation(), 1, 60L); // 3 seconds temporary launch water
-        }
+        boolean isInfinite = plugin.isZoInfinite(player.getUniqueId());
+        Vector flyVector = player.getLocation().getDirection().normalize().multiply(1.35);
+        float startYaw = player.getLocation().getYaw();
+        float startPitch = player.getLocation().getPitch();
 
-        // 2. Permanent 3x3 Water Trail (Triggers if /zo is ON)
-        if (plugin.isZoEnabled(player.getUniqueId())) {
-            new BukkitRunnable() {
-                int ticks = 0;
+        new BukkitRunnable() {
+            int ticks = 0;
 
-                @Override
-                public void run() {
-                    if (!player.isOnline() || player.isDead() || ticks > 30) {
+            @Override
+            public void run() {
+                if (!player.isOnline() || player.isDead()) {
+                    this.cancel();
+                    return;
+                }
+
+                if (isInfinite) {
+                    // Check if player changed head direction
+                    float currentYaw = player.getLocation().getYaw();
+                    float currentPitch = player.getLocation().getPitch();
+
+                    if (Math.abs(currentYaw - startYaw) > 12.0f || Math.abs(currentPitch - startPitch) > 12.0f) {
                         this.cancel();
                         return;
                     }
 
-                    // Places PERMANENT 3x3 flowing water blocks
-                    createPermanentWaterGrid(player.getLocation(), 1);
+                    player.setVelocity(flyVector);
+                    create3DWaterGrid(player.getLocation(), 1);
+                } else {
+                    if (ticks > 30) {
+                        this.cancel();
+                        return;
+                    }
+                    create3DWaterGrid(player.getLocation(), 1);
                     ticks += 2;
                 }
-            }.runTaskTimer(plugin, 0L, 2L);
-        }
+            }
+        }.runTaskTimer(plugin, 0L, 1L);
     }
 
-    // Creates temporary water grid with physics (true) that restores original blocks
+    // Temporary Water Launchpad
     private void createTemporaryWaterGrid(Location centerLoc, int radius, long restoreDelayTicks) {
         Map<Block, BlockData> originalBlocks = new HashMap<>();
 
@@ -66,7 +94,7 @@ public class TridentListener implements Listener {
                 Block block = centerLoc.clone().add(x, 0, z).getBlock();
                 if (block.getType() == Material.AIR || block.getType() == Material.CAVE_AIR) {
                     originalBlocks.put(block, block.getBlockData().clone());
-                    block.setType(Material.WATER, true); // true = normal flowing water physics
+                    block.setType(Material.WATER, true);
                 }
             }
         }
@@ -86,13 +114,15 @@ public class TridentListener implements Listener {
         }
     }
 
-    // Creates PERMANENT 3x3 flowing water grid
-    private void createPermanentWaterGrid(Location centerLoc, int radius) {
+    // 3D Water Grid prevents falling during horizontal X/Z Riptide flight
+    private void create3DWaterGrid(Location centerLoc, int radius) {
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
-                Block block = centerLoc.clone().add(x, 0, z).getBlock();
-                if (block.getType() == Material.AIR || block.getType() == Material.CAVE_AIR) {
-                    block.setType(Material.WATER, true); // true = normal flowing water physics
+                for (int y = -1; y <= 1; y++) {
+                    Block block = centerLoc.clone().add(x, y, z).getBlock();
+                    if (block.getType() == Material.AIR || block.getType() == Material.CAVE_AIR) {
+                        block.setType(Material.WATER, true);
+                    }
                 }
             }
         }
