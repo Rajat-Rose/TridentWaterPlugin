@@ -7,7 +7,6 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class LaunchpadCommand implements CommandExecutor, TabCompleter {
@@ -21,35 +20,30 @@ public class LaunchpadCommand implements CommandExecutor, TabCompleter {
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(ChatColor.RED + "This command can only be used by players.");
+            sender.sendMessage(ChatColor.RED + "Only players can use this command.");
             return true;
         }
 
-        if (args.length != 1) {
-            player.sendMessage(ChatColor.YELLOW + "Usage: /tridentlaunchpad <on|off>");
-            return true;
+        if (args.length == 1) {
+            if (args[0].equalsIgnoreCase("on")) {
+                plugin.setLaunchpadEnabled(player.getUniqueId(), true);
+                player.sendMessage(ChatColor.GREEN + "Launchpad ENABLED!");
+                return true;
+            } else if (args[0].equalsIgnoreCase("off")) {
+                plugin.setLaunchpadEnabled(player.getUniqueId(), false);
+                player.sendMessage(ChatColor.RED + "Launchpad DISABLED!");
+                return true;
+            }
         }
 
-        if (args[0].equalsIgnoreCase("on")) {
-            plugin.setLaunchpadEnabled(player.getUniqueId(), true);
-            player.sendMessage(ChatColor.GREEN + "Crouch Trident Launchpad ENABLED!");
-        } else if (args[0].equalsIgnoreCase("off")) {
-            plugin.setLaunchpadEnabled(player.getUniqueId(), false);
-            player.sendMessage(ChatColor.RED + "Crouch Trident Launchpad DISABLED!");
-        } else {
-            player.sendMessage(ChatColor.YELLOW + "Usage: /tridentlaunchpad <on|off>");
-        }
-
+        player.sendMessage(ChatColor.RED + "Usage: /launchpad <on|off>");
         return true;
     }
 
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
-            List<String> options = new ArrayList<>();
-            if ("on".startsWith(args[0].toLowerCase())) options.add("on");
-            if ("off".startsWith(args[0].toLowerCase())) options.add("off");
-            return options;
+            return List.of("on", "off");
         }
         return List.of();
     }
