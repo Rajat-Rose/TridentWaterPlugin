@@ -2,6 +2,7 @@ package com.example.tridentwater;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.ShulkerBox;
@@ -36,6 +37,30 @@ public class TridentListener implements Listener {
         this.plugin = plugin;
     }
 
+    private Enchantment getEfficiencyEnchant() {
+        Enchantment eff = Enchantment.getByKey(NamespacedKey.minecraft("efficiency"));
+        if (eff == null) {
+            eff = Enchantment.getByName("DIG_SPEED");
+        }
+        return eff;
+    }
+
+    private Enchantment getSilkTouchEnchant() {
+        Enchantment st = Enchantment.getByKey(NamespacedKey.minecraft("silk_touch"));
+        if (st == null) {
+            st = Enchantment.getByName("SILK_TOUCH");
+        }
+        return st;
+    }
+
+    private Enchantment getRiptideEnchant() {
+        Enchantment rip = Enchantment.getByKey(NamespacedKey.minecraft("riptide"));
+        if (rip == null) {
+            rip = Enchantment.getByName("RIPTIDE");
+        }
+        return rip;
+    }
+
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
@@ -48,7 +73,8 @@ public class TridentListener implements Listener {
                 if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && tool.hasItemMeta()) {
                     if (tool.getItemMeta() != null && tool.getItemMeta().hasDisplayName()) {
                         String displayName = tool.getItemMeta().getDisplayName();
-                        int effLevel = tool.getEnchantmentLevel(Enchantment.DIG_SPEED);
+                        Enchantment effEnchant = getEfficiencyEnchant();
+                        int effLevel = (effEnchant != null) ? tool.getEnchantmentLevel(effEnchant) : 0;
 
                         if (displayName.equalsIgnoreCase("kakta") && effLevel == 2) {
                             Location loc = clickedBlock.getLocation();
@@ -70,7 +96,8 @@ public class TridentListener implements Listener {
         if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
                 ItemStack item = player.getInventory().getItemInMainHand();
-                if (item != null && item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
+                Enchantment ripEnchant = getRiptideEnchant();
+                if (item != null && item.getType() == Material.TRIDENT && ripEnchant != null && item.getEnchantmentLevel(ripEnchant) >= 3) {
                     create1x1Launchpad(player.getLocation(), 40L);
                 }
             }
@@ -164,8 +191,9 @@ public class TridentListener implements Listener {
             if (customName != null && customName.equalsIgnoreCase("Doble kr deneka")) {
                 Player player = event.getPlayer();
                 ItemStack tool = player.getInventory().getItemInMainHand();
+                Enchantment stEnchant = getSilkTouchEnchant();
 
-                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && tool.getEnchantmentLevel(Enchantment.SILK_TOUCH) > 0) {
+                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && stEnchant != null && tool.getEnchantmentLevel(stEnchant) > 0) {
                     event.setDropItems(false);
 
                     ItemStack originalShulker = new ItemStack(event.getBlock().getType());
