@@ -1,8 +1,10 @@
 package com.example.tridentwater;
 
+import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.ShulkerBox;
@@ -16,15 +18,20 @@ import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRiptideEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BlockStateMeta;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.util.Vector;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -32,6 +39,10 @@ public class TridentListener implements Listener {
 
     private final TridentWaterPlugin plugin;
     private final Set<UUID> fallProtectedPlayers = new HashSet<>();
+
+    // Active Mining tracking for custom block hardness
+    private final Map<UUID, BukkitTask> activeMiningTasks = new HashMap<>();
+    private final Map<UUID, Location> activeMiningBlocks = new HashMap<>();
 
     public TridentListener(TridentWaterPlugin plugin) {
         this.plugin = plugin;
@@ -61,29 +72,26 @@ public class TridentListener implements Listener {
         return rip;
     }
 
+    private boolean isKaktaPickaxe(ItemStack tool) {
+        if (tool == null || tool.getType() != Material.WOODEN_PICKAXE || !tool.hasItemMeta()) return false;
+        ItemMeta meta = tool.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) return false;
+        if (!meta.getDisplayName().equalsIgnoreCase("kakta")) return false;
+        Enchantment eff = getEfficiencyEnchant();
+        return eff != null && tool.getEnchantmentLevel(eff) == 2;
+    }
+
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
 
-        // 1. Break Bedrock / Illegal Blocks with "kakta" Wooden Pickaxe (Efficiency II)
+        // 1. Break Bedrock / Illegal Blocks with "kakta" Wooden Pickaxe (Efficiency II) with Mining Delay
         if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
             Block clickedBlock = event.getClickedBlock();
             if (clickedBlock != null && clickedBlock.getType() != Material.AIR) {
                 ItemStack tool = player.getInventory().getItemInMainHand();
-                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && tool.hasItemMeta()) {
-                    if (tool.getItemMeta() != null && tool.getItemMeta().hasDisplayName()) {
-                        String displayName = tool.getItemMeta().getDisplayName();
-                        Enchantment effEnchant = getEfficiencyEnchant();
-                        int effLevel = (effEnchant != null) ? tool.getEnchantmentLevel(effEnchant) : 0;
-
-                        if (displayName.equalsIgnoreCase("kakta") && effLevel == 2) {
-                            Location loc = clickedBlock.getLocation();
-                            World world = clickedBlock.getWorld();
-
-                            world.dropItemNaturally(loc.clone().add(0.5, 0.5, 0.5), new ItemStack(clickedBlock.getType()));
-                            clickedBlock.setType(Material.AIR);
-                        }
-                    }
+                if (isKaktaPickaxe(tool)) {
+                    startMiningBlock(player, clickedBlock);
                 }
             }
         }
@@ -102,6 +110,100 @@ public class TridentListener implements Listener {
                 }
             }
         }
+    }
+
+    private void startMiningBlock(Player player, Block block) {
+        UUID uuid = player.getUniqueId();
+        Location targetLoc = block.getLocation();
+
+        // Avoid re-starting if already mining this block
+        if (activeMiningBlocks.containsKey(uuid) && activeMiningBlocks.get(uuid).equals(targetLoc)) {
+            return;
+        }
+
+        stopMining(player);
+        activeMiningBlocks.put(uuid, targetLoc);
+
+        BukkitTask task = new BukkitRunnable() {
+            int ticksElapsed = 0;
+            final int totalTicksNeeded = 23; // ~1.15 seconds (Wooden Pickaxe speed on Stone)
+
+            @Override
+            public void run() {
+                if (!player.isOnline() || player.isDead()) {
+                    stopMining(player);
+                    this.cancel();
+                    return;
+                }
+
+                ItemStack tool = player.getInventory().getItemInMainHand();
+                Block currentTarget = player.getTargetBlockExact(5);
+
+                // Stop mining if player looks away or changes tool
+                if (!isKaktaPickaxe(tool) || currentTarget == null || !currentTarget.getLocation().equals(targetLoc)) {
+                    stopMining(player);
+                    this.cancel();
+                    return;
+                }
+
+                ticksElapsed++;
+                float progress = (float) ticksElapsed / (float) totalTicksNeeded;
+
+                // Send block crack texture animation
+                sendBlockCrackAnimation(targetLoc, progress);
+
+                // Play mining hit sound every 4 ticks
+                if (ticksElapsed % 4 == 0) {
+                    targetLoc.getWorld().playSound(targetLoc, Sound.BLOCK_STONE_HIT, 1.0f, 1.0f);
+                }
+
+                // Complete mining
+                if (ticksElapsed >= totalTicksNeeded) {
+                    sendBlockCrackAnimation(targetLoc, 0.0f);
+
+                    World world = targetLoc.getWorld();
+                    world.playSound(targetLoc, Sound.BLOCK_STONE_BREAK, 1.0f, 1.0f);
+                    world.playEffect(targetLoc, Effect.STEP_SOUND, targetLoc.getBlock().getType());
+
+                    if (targetLoc.getBlock().getType() != Material.AIR) {
+                        world.dropItemNaturally(targetLoc.clone().add(0.5, 0.5, 0.5), new ItemStack(targetLoc.getBlock().getType()));
+                        targetLoc.getBlock().setType(Material.AIR);
+                    }
+
+                    stopMining(player);
+                    this.cancel();
+                }
+            }
+        }.runTaskTimer(plugin, 0L, 1L);
+
+        activeMiningTasks.put(uuid, task);
+    }
+
+    private void stopMining(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (activeMiningTasks.containsKey(uuid)) {
+            activeMiningTasks.get(uuid).cancel();
+            activeMiningTasks.remove(uuid);
+        }
+        if (activeMiningBlocks.containsKey(uuid)) {
+            Location loc = activeMiningBlocks.remove(uuid);
+            if (loc != null && loc.getWorld() != null) {
+                sendBlockCrackAnimation(loc, 0.0f);
+            }
+        }
+    }
+
+    private void sendBlockCrackAnimation(Location loc, float progress) {
+        for (Player p : loc.getWorld().getPlayers()) {
+            if (p.getLocation().distanceSquared(loc) <= 1024) {
+                p.sendBlockDamage(loc, progress);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        stopMining(event.getPlayer());
     }
 
     @EventHandler
