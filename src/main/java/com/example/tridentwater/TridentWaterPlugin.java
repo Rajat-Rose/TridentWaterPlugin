@@ -24,9 +24,9 @@ public class TridentWaterPlugin extends JavaPlugin {
         }
 
         LaunchpadCommand launchpadCommand = new LaunchpadCommand(this);
-        if (getCommand("tridentlaunchpad") != null) {
-            getCommand("tridentlaunchpad").setExecutor(launchpadCommand);
-            getCommand("tridentlaunchpad").setTabCompleter(launchpadCommand);
+        if (getCommand("launchpad") != null) {
+            getCommand("launchpad").setExecutor(launchpadCommand);
+            getCommand("launchpad").setTabCompleter(launchpadCommand);
         }
 
         getServer().getPluginManager().registerEvents(new TridentListener(this), this);
