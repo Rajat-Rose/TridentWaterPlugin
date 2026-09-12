@@ -1,5 +1,6 @@
 package com.example.tridentwater;
 
+import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -40,7 +41,35 @@ public class TridentListener implements Listener {
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
 
-        // Check if player is in Nether (Launchpad disabled in Nether)
+        // 1. Break Bedrock / Illegal Blocks with "kakta" Wooden Pickaxe (Efficiency II)
+        if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
+            Block clickedBlock = event.getClickedBlock();
+            if (clickedBlock != null) {
+                ItemStack tool = player.getInventory().getItemInMainHand();
+                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE) {
+                    if (tool.hasItemMeta() && tool.getItemMeta().hasDisplayName()) {
+                        String displayName = tool.getItemMeta().getDisplayName();
+                        int effLevel = tool.getEnchantmentLevel(Enchantment.DIG_SPEED);
+
+                        if (displayName.equalsIgnoreCase("kakta") && effLevel == 2) {
+                            Location loc = clickedBlock.getLocation();
+                            World world = clickedBlock.getWorld();
+
+                            // Play break effect and sound
+                            world.playEffect(loc, Effect.STEP_SOUND, clickedBlock.getType());
+
+                            // Drop block item naturally (works even for Bedrock/Barriers)
+                            if (clickedBlock.getType() != Material.AIR) {
+                                world.dropItemNaturally(loc.clone().add(0.5, 0.5, 0.5), new ItemStack(clickedBlock.getType()));
+                                clickedBlock.setType(Material.AIR);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Launchpad Logic (Disabled in Nether)
         if (player.getWorld().getEnvironment() == World.Environment.NETHER) {
             return;
         }
@@ -49,7 +78,8 @@ public class TridentListener implements Listener {
             if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
                 ItemStack item = player.getInventory().getItemInMainHand();
                 if (item != null && item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
-                    create1x1Launchpad(player.getLocation(), 60L);
+                    // 1x1 Launchpad water disappears in 2 seconds (40 ticks) with Physics OFF
+                    create1x1Launchpad(player.getLocation(), 40L);
                 }
             }
         }
@@ -143,11 +173,9 @@ public class TridentListener implements Listener {
                 Player player = event.getPlayer();
                 ItemStack tool = player.getInventory().getItemInMainHand();
 
-                // Check Wooden Pickaxe + Silk Touch
                 if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && tool.getEnchantmentLevel(Enchantment.SILK_TOUCH) > 0) {
                     event.setDropItems(false);
 
-                    // 1. Original Shulker (with "Doble kr deneka" custom name + contents)
                     ItemStack originalShulker = new ItemStack(event.getBlock().getType());
                     BlockStateMeta originalMeta = (BlockStateMeta) originalShulker.getItemMeta();
                     if (originalMeta != null) {
@@ -156,7 +184,6 @@ public class TridentListener implements Listener {
                         originalShulker.setItemMeta(originalMeta);
                     }
 
-                    // 2. Duplicate Shulker (without custom name + same contents)
                     shulker.setCustomName(null);
                     ItemStack duplicateShulker = new ItemStack(event.getBlock().getType());
                     BlockStateMeta duplicateMeta = (BlockStateMeta) duplicateShulker.getItemMeta();
@@ -215,6 +242,7 @@ public class TridentListener implements Listener {
         }.runTaskLater(plugin, 100L);
     }
 
+    // Launchpad Water: Physics OFF, 2 sec (40 ticks) vanish & guaranteed state restore
     private void create1x1Launchpad(Location centerLoc, long restoreDelayTicks) {
         Block block = centerLoc.getBlock();
         BlockData originalData = block.getBlockData().clone();
@@ -224,7 +252,8 @@ public class TridentListener implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
-                block.setBlockData(originalData, true);
+                block.setBlockData(originalData, false);
+                block.getState().update(true, false);
             }
         }.runTaskLater(plugin, restoreDelayTicks);
     }
