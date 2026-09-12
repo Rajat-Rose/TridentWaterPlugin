@@ -1,6 +1,5 @@
 package com.example.tridentwater;
 
-import org.bukkit.Effect;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -44,10 +43,10 @@ public class TridentListener implements Listener {
         // 1. Break Bedrock / Illegal Blocks with "kakta" Wooden Pickaxe (Efficiency II)
         if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
             Block clickedBlock = event.getClickedBlock();
-            if (clickedBlock != null) {
+            if (clickedBlock != null && clickedBlock.getType() != Material.AIR) {
                 ItemStack tool = player.getInventory().getItemInMainHand();
-                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE) {
-                    if (tool.hasItemMeta() && tool.getItemMeta().hasDisplayName()) {
+                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && tool.hasItemMeta()) {
+                    if (tool.getItemMeta() != null && tool.getItemMeta().hasDisplayName()) {
                         String displayName = tool.getItemMeta().getDisplayName();
                         int effLevel = tool.getEnchantmentLevel(Enchantment.DIG_SPEED);
 
@@ -55,14 +54,8 @@ public class TridentListener implements Listener {
                             Location loc = clickedBlock.getLocation();
                             World world = clickedBlock.getWorld();
 
-                            // Play break effect and sound
-                            world.playEffect(loc, Effect.STEP_SOUND, clickedBlock.getType());
-
-                            // Drop block item naturally (works even for Bedrock/Barriers)
-                            if (clickedBlock.getType() != Material.AIR) {
-                                world.dropItemNaturally(loc.clone().add(0.5, 0.5, 0.5), new ItemStack(clickedBlock.getType()));
-                                clickedBlock.setType(Material.AIR);
-                            }
+                            world.dropItemNaturally(loc.clone().add(0.5, 0.5, 0.5), new ItemStack(clickedBlock.getType()));
+                            clickedBlock.setType(Material.AIR);
                         }
                     }
                 }
@@ -78,7 +71,6 @@ public class TridentListener implements Listener {
             if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
                 ItemStack item = player.getInventory().getItemInMainHand();
                 if (item != null && item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
-                    // 1x1 Launchpad water disappears in 2 seconds (40 ticks) with Physics OFF
                     create1x1Launchpad(player.getLocation(), 40L);
                 }
             }
@@ -155,7 +147,7 @@ public class TridentListener implements Listener {
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         ItemStack item = event.getItemInHand();
-        if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+        if (item != null && item.hasItemMeta() && item.getItemMeta() != null && item.getItemMeta().hasDisplayName()) {
             if (item.getItemMeta().getDisplayName().equalsIgnoreCase("Doble kr deneka")) {
                 if (event.getBlockPlaced().getState() instanceof ShulkerBox shulker) {
                     shulker.setCustomName("Doble kr deneka");
@@ -201,15 +193,15 @@ public class TridentListener implements Listener {
     }
 
     private Vector getDirectionVector(String dir) {
-        return switch (dir.toLowerCase()) {
-            case "+x" -> new Vector(1.4, 0.05, 0);
-            case "-x" -> new Vector(-1.4, 0.05, 0);
-            case "+z" -> new Vector(0, 0.05, 1.4);
-            case "-z" -> new Vector(0, 0.05, -1.4);
-            case "+y" -> new Vector(0, 1.4, 0);
-            case "-y" -> new Vector(0, -1.4, 0);
-            default -> new Vector(1.4, 0.05, 0);
-        };
+        switch (dir.toLowerCase()) {
+            case "+x": return new Vector(1.4, 0.05, 0);
+            case "-x": return new Vector(-1.4, 0.05, 0);
+            case "+z": return new Vector(0, 0.05, 1.4);
+            case "-z": return new Vector(0, 0.05, -1.4);
+            case "+y": return new Vector(0, 1.4, 0);
+            case "-y": return new Vector(0, -1.4, 0);
+            default: return new Vector(1.4, 0.05, 0);
+        }
     }
 
     private void stopFlight(Player player) {
@@ -242,7 +234,6 @@ public class TridentListener implements Listener {
         }.runTaskLater(plugin, 100L);
     }
 
-    // Launchpad Water: Physics OFF, 2 sec (40 ticks) vanish & guaranteed state restore
     private void create1x1Launchpad(Location centerLoc, long restoreDelayTicks) {
         Block block = centerLoc.getBlock();
         BlockData originalData = block.getBlockData().clone();
