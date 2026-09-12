@@ -2,17 +2,22 @@ package com.example.tridentwater;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.ShulkerBox;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.enchantments.Enchantment;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerRiptideEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BlockStateMeta;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 import org.bukkit.scheduler.BukkitRunnable;
@@ -34,11 +39,17 @@ public class TridentListener implements Listener {
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
+
+        // Check if player is in Nether (Launchpad disabled in Nether)
+        if (player.getWorld().getEnvironment() == World.Environment.NETHER) {
+            return;
+        }
+
         if (event.getAction() == Action.RIGHT_CLICK_AIR || event.getAction() == Action.RIGHT_CLICK_BLOCK) {
             if (plugin.isLaunchpadEnabled(player.getUniqueId()) && player.isSneaking()) {
                 ItemStack item = player.getInventory().getItemInMainHand();
                 if (item != null && item.getType() == Material.TRIDENT && item.getEnchantmentLevel(Enchantment.RIPTIDE) >= 3) {
-                    create1x1Launchpad(player.getLocation(), 40L); // Clears water after 2 seconds
+                    create1x1Launchpad(player.getLocation(), 60L);
                 }
             }
         }
@@ -111,12 +122,63 @@ public class TridentListener implements Listener {
         }.runTaskTimer(plugin, 0L, 1L);
     }
 
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent event) {
+        ItemStack item = event.getItemInHand();
+        if (item != null && item.hasItemMeta() && item.getItemMeta().hasDisplayName()) {
+            if (item.getItemMeta().getDisplayName().equalsIgnoreCase("Doble kr deneka")) {
+                if (event.getBlockPlaced().getState() instanceof ShulkerBox shulker) {
+                    shulker.setCustomName("Doble kr deneka");
+                    shulker.update();
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent event) {
+        if (event.getBlock().getState() instanceof ShulkerBox shulker) {
+            String customName = shulker.getCustomName();
+            if (customName != null && customName.equalsIgnoreCase("Doble kr deneka")) {
+                Player player = event.getPlayer();
+                ItemStack tool = player.getInventory().getItemInMainHand();
+
+                // Check Wooden Pickaxe + Silk Touch
+                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && tool.getEnchantmentLevel(Enchantment.SILK_TOUCH) > 0) {
+                    event.setDropItems(false);
+
+                    // 1. Original Shulker (with "Doble kr deneka" custom name + contents)
+                    ItemStack originalShulker = new ItemStack(event.getBlock().getType());
+                    BlockStateMeta originalMeta = (BlockStateMeta) originalShulker.getItemMeta();
+                    if (originalMeta != null) {
+                        originalMeta.setBlockState(shulker);
+                        originalMeta.setDisplayName("Doble kr deneka");
+                        originalShulker.setItemMeta(originalMeta);
+                    }
+
+                    // 2. Duplicate Shulker (without custom name + same contents)
+                    shulker.setCustomName(null);
+                    ItemStack duplicateShulker = new ItemStack(event.getBlock().getType());
+                    BlockStateMeta duplicateMeta = (BlockStateMeta) duplicateShulker.getItemMeta();
+                    if (duplicateMeta != null) {
+                        duplicateMeta.setBlockState(shulker);
+                        duplicateShulker.setItemMeta(duplicateMeta);
+                    }
+
+                    Location dropLoc = event.getBlock().getLocation().add(0.5, 0.5, 0.5);
+                    event.getBlock().getWorld().dropItemNaturally(dropLoc, originalShulker);
+                    event.getBlock().getWorld().dropItemNaturally(dropLoc, duplicateShulker);
+                }
+            }
+        }
+    }
+
     private Vector getDirectionVector(String dir) {
         return switch (dir.toLowerCase()) {
             case "+x" -> new Vector(1.4, 0.05, 0);
             case "-x" -> new Vector(-1.4, 0.05, 0);
             case "+z" -> new Vector(0, 0.05, 1.4);
-            case "-z" -> new Vector(0, -0.05, -1.4);
+            case "-z" -> new Vector(0, 0.05, -1.4);
             case "+y" -> new Vector(0, 1.4, 0);
             case "-y" -> new Vector(0, -1.4, 0);
             default -> new Vector(1.4, 0.05, 0);
@@ -153,10 +215,8 @@ public class TridentListener implements Listener {
         }.runTaskLater(plugin, 100L);
     }
 
-    // Guaranteed Launchpad Water Removal & Block Restoration
     private void create1x1Launchpad(Location centerLoc, long restoreDelayTicks) {
         Block block = centerLoc.getBlock();
-        Material originalMaterial = block.getType();
         BlockData originalData = block.getBlockData().clone();
 
         block.setType(Material.WATER, false);
@@ -164,13 +224,7 @@ public class TridentListener implements Listener {
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (originalMaterial == Material.AIR || originalMaterial == Material.CAVE_AIR || originalMaterial == Material.VOID_AIR) {
-                    block.setType(Material.AIR, true);
-                } else {
-                    block.setBlockData(originalData, true);
-                }
-                // Force state update to clear phantom water graphics
-                block.getState().update(true, true);
+                block.setBlockData(originalData, true);
             }
         }.runTaskLater(plugin, restoreDelayTicks);
     }
