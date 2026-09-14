@@ -40,7 +40,6 @@ public class TridentListener implements Listener {
     private final TridentWaterPlugin plugin;
     private final Set<UUID> fallProtectedPlayers = new HashSet<>();
 
-    // Active Mining tracking for custom block hardness
     private final Map<UUID, BukkitTask> activeMiningTasks = new HashMap<>();
     private final Map<UUID, Location> activeMiningBlocks = new HashMap<>();
 
@@ -81,11 +80,20 @@ public class TridentListener implements Listener {
         return eff != null && tool.getEnchantmentLevel(eff) == 2;
     }
 
+    private boolean isKokoPickaxe(ItemStack tool) {
+        if (tool == null || tool.getType() != Material.WOODEN_PICKAXE || !tool.hasItemMeta()) return false;
+        ItemMeta meta = tool.getItemMeta();
+        if (meta == null || !meta.hasDisplayName()) return false;
+        if (!meta.getDisplayName().equalsIgnoreCase("koko")) return false;
+        Enchantment st = getSilkTouchEnchant();
+        return st != null && tool.getEnchantmentLevel(st) > 0;
+    }
+
     @EventHandler
     public void onInteract(PlayerInteractEvent event) {
         Player player = event.getPlayer();
 
-        // 1. Break Bedrock / Illegal Blocks with "kakta" Wooden Pickaxe (Efficiency II) with Mining Delay
+        // 1. Break Bedrock / Illegal Blocks with "kakta" Wooden Pickaxe (Efficiency II)
         if (event.getAction() == Action.LEFT_CLICK_BLOCK) {
             Block clickedBlock = event.getClickedBlock();
             if (clickedBlock != null && clickedBlock.getType() != Material.AIR) {
@@ -96,7 +104,7 @@ public class TridentListener implements Listener {
             }
         }
 
-        // 2. Launchpad Logic (Disabled in Nether)
+        // 2. Launchpad Logic (Disabled ONLY in Nether)
         if (player.getWorld().getEnvironment() == World.Environment.NETHER) {
             return;
         }
@@ -116,7 +124,6 @@ public class TridentListener implements Listener {
         UUID uuid = player.getUniqueId();
         Location targetLoc = block.getLocation();
 
-        // Avoid re-starting if already mining this block
         if (activeMiningBlocks.containsKey(uuid) && activeMiningBlocks.get(uuid).equals(targetLoc)) {
             return;
         }
@@ -126,7 +133,7 @@ public class TridentListener implements Listener {
 
         BukkitTask task = new BukkitRunnable() {
             int ticksElapsed = 0;
-            final int totalTicksNeeded = 23; // ~1.15 seconds (Wooden Pickaxe speed on Stone)
+            final int totalTicksNeeded = 23;
 
             @Override
             public void run() {
@@ -139,7 +146,6 @@ public class TridentListener implements Listener {
                 ItemStack tool = player.getInventory().getItemInMainHand();
                 Block currentTarget = player.getTargetBlockExact(5);
 
-                // Stop mining if player looks away or changes tool
                 if (!isKaktaPickaxe(tool) || currentTarget == null || !currentTarget.getLocation().equals(targetLoc)) {
                     stopMining(player);
                     this.cancel();
@@ -149,15 +155,12 @@ public class TridentListener implements Listener {
                 ticksElapsed++;
                 float progress = (float) ticksElapsed / (float) totalTicksNeeded;
 
-                // Send block crack texture animation
                 sendBlockCrackAnimation(targetLoc, progress);
 
-                // Play mining hit sound every 4 ticks
                 if (ticksElapsed % 4 == 0) {
                     targetLoc.getWorld().playSound(targetLoc, Sound.BLOCK_STONE_HIT, 1.0f, 1.0f);
                 }
 
-                // Complete mining
                 if (ticksElapsed >= totalTicksNeeded) {
                     sendBlockCrackAnimation(targetLoc, 0.0f);
 
@@ -210,6 +213,7 @@ public class TridentListener implements Listener {
     public void onRiptide(PlayerRiptideEvent event) {
         Player player = event.getPlayer();
 
+        // ZO works in ALL dimensions (Overworld, Nether, End)
         if (!plugin.isZoEnabled(player.getUniqueId())) return;
 
         boolean isInfinite = plugin.isZoInfinite(player.getUniqueId());
@@ -293,9 +297,9 @@ public class TridentListener implements Listener {
             if (customName != null && customName.equalsIgnoreCase("Doble kr deneka")) {
                 Player player = event.getPlayer();
                 ItemStack tool = player.getInventory().getItemInMainHand();
-                Enchantment stEnchant = getSilkTouchEnchant();
 
-                if (tool != null && tool.getType() == Material.WOODEN_PICKAXE && stEnchant != null && tool.getEnchantmentLevel(stEnchant) > 0) {
+                // Shulker duplication requires Wooden Pickaxe named "koko" with Silk Touch
+                if (isKokoPickaxe(tool)) {
                     event.setDropItems(false);
 
                     ItemStack originalShulker = new ItemStack(event.getBlock().getType());
